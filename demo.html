@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="x-ua-compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+	<title>A Simple & Light Vue Audio / Video Player</title>
+	<script src="//cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.min.js"></script>
+	<link rel='stylesheet' href='//cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css' type='text/css' media='all' />
+	<link rel='stylesheet' href='vue-player.css' type='text/css' media='all' />
+	<script src="vue-player.js"></script>
+</head>
+
+<body>
+	<div class="container content has-text-centered">
+		<h1>A Simple & Light Vue Audio / Video Player</h1>
+		<div id="player"></div>
+	</div>
+</body>
+<script>
+	let urls = [
+		{
+			"type": "m3u8",
+			"url": "http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/nonuk/sbr_low/ak/bbc_world_service.m3u8",
+			"cors": 1,
+		},
+		{
+			"type": "m3u8",
+			"url": "https://as-hls-ww-live.akamaized.net/pool_904/live/ww/bbc_radio_one/bbc_radio_one.isml/bbc_radio_one-audio%3d96000.norewind.m3u8",
+			"cors": 1
+		},
+		{
+			"type": "mp3",
+			"url": "https://14033.live.streamtheworld.com/YES933_PREM.aac",
+			"cors": ""
+		}
+	];
+
+	let config = {
+		"container": "#player",
+		"urls": urls,
+		"volume": 0.5,
+		"autoplay": true,
+		"is_audio": true,
+		"is_live": true,
+		"url_start": 0,
+	};
+	build_aliplayer(config);
+</script>
+
+</html>
