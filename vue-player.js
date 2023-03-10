@@ -6,8 +6,7 @@
  * - bulma.css
  * - hls.js（.m3u8）
  * - dashjs（.mpd）
- * - wnd_load_script()：动态载入依赖脚本
- * 
+ *
  * @link https://developer.mozilla.org/zh-CN/docs/Learn/HTML/Multimedia_and_embedding/Video_and_audio_content
  * @link https://github.com/video-dev/hls.js/blob/master/docs/API.md
  * @link https://cdn.dashjs.org/latest/jsdoc/index.html
@@ -26,7 +25,7 @@
 // 定义全局 hls 实例，以便于在切换时播放器时销毁，停止加载流媒体
 let hls = null;
 
-function build_aliplayer(config) {
+function vue_player(config) {
     let defaults = {
         "container": "",
         "urls": "",
@@ -35,6 +34,8 @@ function build_aliplayer(config) {
         "is_audio": true,
         "is_live": true,
         "url_start": 0,
+        "callback": false, // 播放构建后的回调函数，将回传本 vue 实例 (this)
+        "errorback": false, // 播放出错时的回调函数，将回传本 vue 实例 (this)
     };
     config = Object.assign(defaults, config);
 
@@ -61,18 +62,19 @@ function build_aliplayer(config) {
 			</div>
 			<span v-show="status_show('error')"><i>Error !</i></span>
 		</div>
-		<div id="info-bar" class="column is-2 is-justify-content-left">
+		<div id="info-bar" class="column is-4 is-justify-content-left">
 			<a @click="fullscreen()" class="full-screen mr-5" v-show="!config.is_audio"></a>
             <span v-show="loading_time">……</span>
+            <div v-show="msg && !loading_time" class="is-size-7" v-html="msg"></div>
 		</div>
 		<div id="tools-bar" class="column is-auto is-justify-content-right"> 
             <div id="line-switcher" class="is-size-7" style="text-shadow:none;color:#EEE;">
-                <div style="text-align:left;position: absolute;bottom:100%;z-index:99;background:#CF8E8A;padding:10px;border-radius:3px 3px 0 0;" :class="show_line ? '' : 'is-hidden' ">
+                <div style="text-align:left;position: absolute;top:100%;z-index:99;background:#CF8E8A;padding:10px;border-radius:0 0 3px 3px;" :class="show_line ? '' : 'is-hidden' ">
                     <ul>
                         <li v-for="(stream, index) in config.urls"><a @click="switch_stream(index)">L{{(index + 1) + '. ' + stream.type}}</a></li>
                     </ul>
                 </div>
-                <a @click="line_show()"><span style="padding:3px 10px;border-radius:3px;box-shadow:0px 0px 1px #500;">Line : {{url_index + 1}}</span></a>
+                <a @click="line_show()"><span style="user-select:none;padding:3px 10px;border-radius:3px;box-shadow:0px 0px 1px #500;">Line : {{url_index + 1}}</span></a>
             </div>
             <input id="volume-bar" class="is-hidden-touch ml-3" type="range" max="1" step="0.001" v-model="volume">
 		</div>
@@ -86,6 +88,7 @@ function build_aliplayer(config) {
                 "config": config,
                 "player": null,
                 "volume": config.volume,
+                "autoplay": config.autoplay,
                 "url": "",
                 "url_index": config.url_start,
                 "cors": false,
@@ -99,35 +102,28 @@ function build_aliplayer(config) {
                 "loading_interval": null,
                 "tryagin_timer": null,
                 "show_line": false,
+                "msg": "",
             };
         },
         methods: {
-            build: async function () {
+            build: function () {
+                // 检查是否全部为空
+                let empty = !config.urls.some((el) => el.url.length > 0);
+                if (empty) {
+                    return;
+                }
+
                 let el_id = config.is_audio ? "audio-el" : "video-el";
                 this.player = document.getElementById(el_id);
 
                 this.init_meida();
+                this.build_player();
 
-                if (this.cors < 0) {
-                    return this.build_h5_player();
+                // 切换 stream 或重新载入 urls 均执行回调
+                let callback = config.callback;
+                if ("function" == typeof callback) {
+                    callback(this);
                 }
-
-                // url = url + "?ran=" + Math.random();
-                if (this.require_hls()) {
-                    if ("undefined" == typeof Hls) {
-                        await async_load_script("https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/hls.js/1.1.5/hls.min.js");
-                    }
-                    return this.build_hls_player();
-                }
-
-                if (this.require_dash()) {
-                    if ("undefined" == typeof dashjs) {
-                        await async_load_script("https://cdn.dashjs.org/v4.6.0/dash.all.min.js");
-                    }
-                    return this.build_dash_player();
-                }
-
-                this.build_h5_player();
             },
             require_hls: function () {
                 if (this.is_app_safari()) {
@@ -149,6 +145,37 @@ function build_aliplayer(config) {
                     return false;
                 }
                 return platformExpression.test(agent) && expectedExpression.test(agent);
+            },
+            build_player: async function () {
+                if (this.cors < 0) {
+                    if (this.is_mobile()) {
+                        return this.build_h5_player();
+                    } else {
+                        this.msg = "Error on line " + (this.url_index + 1);
+                        if (this.url_index < config.urls.length - 1) {
+                            this.url_index++;
+                            this.build();
+                        }
+                        return;
+                    }
+                }
+
+                // url = url + "?ran=" + Math.random();
+                if (this.require_hls()) {
+                    if ("undefined" == typeof Hls) {
+                        await this.load_script("https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/hls.js/1.1.5/hls.min.js");
+                    }
+                    return this.build_hls_player();
+                }
+
+                if (this.require_dash()) {
+                    if ("undefined" == typeof dashjs) {
+                        await this.load_script("https://cdn.dashjs.org/v4.6.0/dash.all.min.js");
+                    }
+                    return this.build_dash_player();
+                }
+
+                this.build_h5_player();
             },
             toggle: function () {
                 if ("error" == this.status || "loading" == this.status) {
@@ -187,17 +214,19 @@ function build_aliplayer(config) {
             },
             build_h5_player: function () {
                 this.player.src = this.url;
-                this.player.autoplay = config.autoplay;
-                this.player.volume = config.volume;
+                this.player.autoplay = this.autoplay;
+                this.player.volume = this.volume;
                 this.monitor_h5(this.player);
-                if (config.autoplay) {
+                if (this.autoplay) {
                     this.player.play();
                 }
             },
             monitor_h5: function (h5_player) {
                 // 当currentTime更新时会触发timeupdate事件
                 h5_player.ontimeupdate = () => {
-                    this.error_count = 0;
+                    if (this.error_count > 0 && h5_player.currentTime > 0) {
+                        this.error_count = 0;
+                    }
                     if ("playing" != this.status) {
                         this.status = "playing";
                     }
@@ -247,13 +276,14 @@ function build_aliplayer(config) {
                     return;
                 }
 
+                this.player.load();
                 hls.loadSource(this.url);
                 hls.attachMedia(this.player);
 
-                this.player.autoplay = config.autoplay;
-                this.player.volume = config.volume;
+                this.player.autoplay = this.autoplay;
+                this.player.volume = this.volume;
                 this.monitor_h5(this.player);
-                if (config.autoplay) {
+                if (this.autoplay) {
                     this.player.play();
                 }
 
@@ -289,9 +319,10 @@ function build_aliplayer(config) {
              * @link http://cdn.dashjs.org/latest/jsdoc/module-MediaPlayer.html#initialize__anchor
              */
             build_dash_player: function () {
+                this.player.load();
                 let player = dashjs.MediaPlayer().create();
-                player.initialize(this.player, this.url, config.autoplay);
-                player.setVolume(config.volume);
+                player.initialize(this.player, this.url, this.autoplay);
+                player.setVolume(this.volume);
                 this.monitor_h5(this.player);
 
                 player.on('error', (e) => {
@@ -304,13 +335,19 @@ function build_aliplayer(config) {
                 this.error_count++;
                 this.status = "error";
 
+                // Error 外部回调
+                let errorback = config.errorback;
+                if ("function" == typeof errorback) {
+                    errorback(this);
+                }
+
                 // 所有 url 均已达到最大试错
-                if (this.error_count >= 5 && this.url_index >= config.urls.length - 1) {
+                if (this.error_count >= 3 && this.url_index >= config.urls.length - 1) {
                     return;
                 }
 
                 // 重试当前 url
-                if (this.error_count < 5) {
+                if (this.error_count < 3) {
                     this.tryagin();
                     return;
                 }
@@ -326,7 +363,7 @@ function build_aliplayer(config) {
             init_meida: function () {
                 let media = config.urls[this.url_index];
                 this.url = media.url;
-                this.cors = media.cors || true;
+                this.cors = media.cors || 1;
 
                 // 销毁可能存在的 hls 实例
                 if (hls) {
@@ -354,6 +391,31 @@ function build_aliplayer(config) {
                 this.url_index = index;
                 this.init_meida;
                 this.build();
+            },
+            // 载入全新的 URLs 组
+            load_urls: function (urls, url_index) {
+                this.url_index = url_index;
+                this.config.urls = urls;
+                this.build();
+            },
+            //判断是否为移动端
+            is_mobile: function () {
+                if (navigator.userAgent.match(/(iPhone|iPad|iPod|Android|ios|App\/)/i)) {
+                    return true;
+                } else {
+                    return false;
+                }
+            },
+            load_script: function (url) {
+                return new Promise(function (resolve, reject) {
+                    let script = document.createElement('script');
+                    script.type = 'text/javascript';
+                    script.src = url;
+                    document.head.appendChild(script);
+                    script.onload = () => {
+                        resolve(true);
+                    };
+                });
             }
         },
         // created: function () { },
@@ -378,16 +440,4 @@ function build_aliplayer(config) {
     };
 
     Vue.createApp(app_option).mount(config.container);
-}
-
-function async_load_script(url) {
-    return new Promise(function (resolve, reject) {
-        let script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = url;
-        document.head.appendChild(script);
-        script.onload = () => {
-            resolve(true);
-        };
-    });
 }

@@ -5,7 +5,11 @@
     align-items: center;
     justify-content: center;
     display: flex;
-    min-width: 60px;
+    min-width: 30px;
+}
+
+#vue-player .columns {
+    height: 100%;
 }
 
 #vue-player {
@@ -29,6 +33,10 @@
 
 #vue-player i {
     font-size: 20px;
+}
+
+#play-button-wrap{
+    max-width: 60px;
 }
 
 /* ******** Status ******* */
